@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi } from "vitest";
 import { renderHook, waitFor } from "@testing-library/react";
-import { useAttestation, useIsValid } from "../src/react.js";
+import { useAttestation, useAttestationsFor, useIsValid } from "../src/react.js";
 import type { Astrolabe } from "../src/client.js";
 
 function fakeClient(overrides: Partial<Astrolabe>): Astrolabe {
@@ -36,5 +36,25 @@ describe("react hooks", () => {
     const { result } = renderHook(() => useIsValid(client, "cd34"));
     await waitFor(() => expect(result.current.loading).toBe(false));
     expect(result.current.error?.message).toBe("rpc down");
+  });
+
+  it("useAttestationsFor resolves subject attestations", async () => {
+    const client = fakeClient({
+      attestationsForSubject: vi.fn().mockResolvedValue(["uid1", "uid2"]),
+    });
+    const { result } = renderHook(() => useAttestationsFor(client, "GABC"));
+    expect(result.current.loading).toBe(true);
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(result.current.data).toEqual(["uid1", "uid2"]);
+    expect(result.current.error).toBeUndefined();
+  });
+
+  it("useAttestationsFor with no subject returns empty array", async () => {
+    const attestationsForSubject = vi.fn();
+    const client = fakeClient({ attestationsForSubject });
+    const { result } = renderHook(() => useAttestationsFor(client, undefined));
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(result.current.data).toEqual([]);
+    expect(attestationsForSubject).not.toHaveBeenCalled();
   });
 });
