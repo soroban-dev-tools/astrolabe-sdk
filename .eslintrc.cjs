@@ -11,6 +11,6 @@ module.exports = {
   env: { node: true, browser: true, es2022: true },
   ignorePatterns: ["dist", "src/generated", "node_modules"],
   rules: {
-    "@typescript-eslint/no-explicit-any": "warn",
+    "@typescript-eslint/no-explicit-any": "error",
   },
 };
