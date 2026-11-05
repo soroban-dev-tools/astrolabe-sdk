@@ -34,8 +34,8 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "lint": "eslint \"src/**/*.ts\" \"test/**/*.ts\" --ignore-pattern \"src/generated/**\"",
-    "lint:fix": "eslint \"src/**/*.ts\" \"test/**/*.ts\" --ignore-pattern \"src/generated/**\" --fix",
+    "lint": "eslint \"src/**/*.{ts,tsx}\" \"test/**/*.{ts,tsx}\" --ignore-pattern \"src/generated/**\"",
+    "lint:fix": "eslint \"src/**/*.{ts,tsx}\" \"test/**/*.{ts,tsx}\" --ignore-pattern \"src/generated/**\" --fix",
     "sync:deployments": "node scripts/sync-deployments.mjs",
     "prepublishOnly": "pnpm build"
   },
