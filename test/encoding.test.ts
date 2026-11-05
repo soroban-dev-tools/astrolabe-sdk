@@ -110,6 +110,24 @@ describe("encode errors", () => {
     );
   });
 
+  it("rejects out-of-range i64", () => {
+    expect(() => encodeData("i64 x", { x: (1n << 63n) })).toThrow(
+      /out of i64 range/,
+    );
+    expect(() => encodeData("i64 x", { x: -(1n << 63n) - 1n })).toThrow(
+      /out of i64 range/,
+    );
+  });
+
+  it("rejects invalid types for numeric fields", () => {
+    expect(() => encodeData("u64 x", { x: "not-a-number" as never })).toThrow(
+      EncodingError,
+    );
+    expect(() => encodeData("bytes b", { b: 12345 as never })).toThrow(
+      EncodingError,
+    );
+  });
+
   it("propagates definition errors", () => {
     expect(() => encodeData("nope x", {})).toThrow(SchemaDefinitionError);
   });

@@ -27,6 +27,10 @@ describe("parseDefinition", () => {
     expect(() => parseDefinition("   ")).toThrow(SchemaDefinitionError);
   });
 
+  it("rejects non-string input", () => {
+    expect(() => parseDefinition(123 as never)).toThrow(/definition must be a string/);
+  });
+
   it("rejects an unknown type", () => {
     expect(() => parseDefinition("u16 x")).toThrow(/unknown type/);
   });
