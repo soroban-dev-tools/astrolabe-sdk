@@ -36,6 +36,20 @@ describe("Astrolabe client initialization", () => {
     expect(client.schemaRegistry.options.rpcUrl).toBe(customRpc);
   });
 
+  it("passes signer options and allowHttp", () => {
+    const fakeSign = async () => ({ signedTxXdr: "AAAA" });
+    const client = new Astrolabe({
+      publicKey: "GBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
+      signTransaction: fakeSign,
+      allowHttp: true,
+    });
+
+    expect(client.schemaRegistry.options.publicKey).toBe(
+      "GBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
+    );
+    expect(client.schemaRegistry.options.allowHttp).toBe(true);
+  });
+
   it("throws clear error when calling write methods without a signer", async () => {
     const client = new Astrolabe();
 
