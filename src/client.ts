@@ -14,6 +14,7 @@ import {
 } from "./generated/attestation.js";
 import deployments from "./deployments.json";
 import { bytesToHex } from "./encoding.js";
+import { mapContractError } from "./errors.js";
 
 /** A uid may be passed as a hex string or raw bytes. */
 export type Uid = string | Uint8Array;
@@ -110,71 +111,99 @@ export class Astrolabe {
   /** Register a schema. Returns the schema uid as a hex string. */
   async registerSchema(args: RegisterSchemaArgs): Promise<string> {
     this.requireSigner("registerSchema");
-    const tx = await this.schemaRegistry.register_schema({
-      authority: args.authority,
-      name: args.name,
-      definition: args.definition,
-      revocable: args.revocable,
-      resolver: args.resolver,
-    });
-    const sent = await tx.signAndSend();
-    return bytesToHex(new Uint8Array(sent.result.unwrap()));
+    try {
+      const tx = await this.schemaRegistry.register_schema({
+        authority: args.authority,
+        name: args.name,
+        definition: args.definition,
+        revocable: args.revocable,
+        resolver: args.resolver,
+      });
+      const sent = await tx.signAndSend();
+      return bytesToHex(new Uint8Array(sent.result.unwrap()));
+    } catch (err) {
+      throw mapContractError("schema_registry", err);
+    }
   }
 
   /** Read a schema by uid. Returns null when it does not exist. */
   async getSchema(schemaUid: Uid): Promise<Schema | null> {
-    const tx = await this.schemaRegistry.get_schema({
-      schema_uid: toBuffer(schemaUid),
-    });
-    return tx.result ?? null;
+    try {
+      const tx = await this.schemaRegistry.get_schema({
+        schema_uid: toBuffer(schemaUid),
+      });
+      return tx.result ?? null;
+    } catch (err) {
+      throw mapContractError("schema_registry", err);
+    }
   }
 
   /** Create an attestation. Returns the attestation uid as a hex string. */
   async attest(args: AttestArgs): Promise<string> {
     this.requireSigner("attest");
-    const tx = await this.attestation.attest({
-      issuer: args.issuer,
-      schema_uid: toBuffer(args.schemaUid),
-      subject: args.subject,
-      data: Buffer.from(args.data),
-      expiration:
-        args.expiration === undefined ? undefined : BigInt(args.expiration),
-      ref_uid: args.refUid === undefined ? undefined : toBuffer(args.refUid),
-    });
-    const sent = await tx.signAndSend();
-    return bytesToHex(new Uint8Array(sent.result.unwrap()));
+    try {
+      const tx = await this.attestation.attest({
+        issuer: args.issuer,
+        schema_uid: toBuffer(args.schemaUid),
+        subject: args.subject,
+        data: Buffer.from(args.data),
+        expiration:
+          args.expiration === undefined ? undefined : BigInt(args.expiration),
+        ref_uid: args.refUid === undefined ? undefined : toBuffer(args.refUid),
+      });
+      const sent = await tx.signAndSend();
+      return bytesToHex(new Uint8Array(sent.result.unwrap()));
+    } catch (err) {
+      throw mapContractError("attestation", err);
+    }
   }
 
   /** Revoke an attestation by uid. */
   async revoke(issuer: string, attestationUid: Uid): Promise<void> {
     this.requireSigner("revoke");
-    const tx = await this.attestation.revoke({
-      issuer,
-      attestation_uid: toBuffer(attestationUid),
-    });
-    const sent = await tx.signAndSend();
-    sent.result.unwrap();
+    try {
+      const tx = await this.attestation.revoke({
+        issuer,
+        attestation_uid: toBuffer(attestationUid),
+      });
+      const sent = await tx.signAndSend();
+      sent.result.unwrap();
+    } catch (err) {
+      throw mapContractError("attestation", err);
+    }
   }
 
   /** Read an attestation by uid. Returns null when it does not exist. */
   async getAttestation(attestationUid: Uid): Promise<Attestation | null> {
-    const tx = await this.attestation.get_attestation({
-      attestation_uid: toBuffer(attestationUid),
-    });
-    return tx.result ?? null;
+    try {
+      const tx = await this.attestation.get_attestation({
+        attestation_uid: toBuffer(attestationUid),
+      });
+      return tx.result ?? null;
+    } catch (err) {
+      throw mapContractError("attestation", err);
+    }
   }
 
   /** Whether an attestation exists, is not revoked, and is not expired. */
   async isValid(attestationUid: Uid): Promise<boolean> {
-    const tx = await this.attestation.is_valid({
-      attestation_uid: toBuffer(attestationUid),
-    });
-    return tx.result;
+    try {
+      const tx = await this.attestation.is_valid({
+        attestation_uid: toBuffer(attestationUid),
+      });
+      return tx.result;
+    } catch (err) {
+      throw mapContractError("attestation", err);
+    }
   }
 
   /** The capped, most-recent attestation uids for a subject, as hex strings. */
   async attestationsForSubject(subject: string): Promise<string[]> {
-    const tx = await this.attestation.attestations_for_subject({ subject });
-    return tx.result.map((b) => bytesToHex(new Uint8Array(b)));
+    try {
+      const tx = await this.attestation.attestations_for_subject({ subject });
+      return tx.result.map((b) => bytesToHex(new Uint8Array(b)));
+    } catch (err) {
+      throw mapContractError("attestation", err);
+    }
   }
 }

@@ -57,4 +57,38 @@ describe("react hooks", () => {
     expect(result.current.data).toEqual([]);
     expect(attestationsForSubject).not.toHaveBeenCalled();
   });
+
+  it("useIsValid with no uid returns false without calling client", async () => {
+    const isValid = vi.fn();
+    const client = fakeClient({ isValid });
+    const { result } = renderHook(() => useIsValid(client, undefined));
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(result.current.data).toBe(false);
+    expect(isValid).not.toHaveBeenCalled();
+  });
+
+  it("useAttestation refetch triggers a reload", async () => {
+    let callCount = 0;
+    const client = fakeClient({
+      getAttestation: vi.fn().mockImplementation(async () => {
+        callCount++;
+        return { subject: `GABC_${callCount}` };
+      }),
+    });
+    const { result } = renderHook(() => useAttestation(client, "ab12"));
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(result.current.data).toEqual({ subject: "GABC_1" });
+
+    result.current.refetch();
+    await waitFor(() => expect(result.current.data).toEqual({ subject: "GABC_2" }));
+  });
+
+  it("useAttestationsFor surfaces errors", async () => {
+    const client = fakeClient({
+      attestationsForSubject: vi.fn().mockRejectedValue(new Error("failed subject query")),
+    });
+    const { result } = renderHook(() => useAttestationsFor(client, "GABC"));
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(result.current.error?.message).toBe("failed subject query");
+  });
 });
