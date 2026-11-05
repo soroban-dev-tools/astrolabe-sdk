@@ -111,4 +111,44 @@ describe("Client error mapping integration", () => {
       SchemaNotFoundError,
     );
   });
+
+  it("translates simulated failure in attest to typed error", async () => {
+    const client = new Astrolabe({
+      publicKey: "GBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
+      signTransaction: async () => ({ signedTxXdr: "AAAA" }),
+    });
+
+    vi.spyOn(client.attestation, "attest").mockRejectedValue(
+      new Error("HostError: Error(Contract, #6)"),
+    );
+
+    await expect(
+      client.attest({
+        issuer: "GABC",
+        schemaUid: "00".repeat(32),
+        subject: "GABC",
+        data: new Uint8Array([1, 2, 3]),
+      }),
+    ).rejects.toThrow(DataTooLongError);
+  });
+
+  it("translates simulated failure in registerSchema to typed error", async () => {
+    const client = new Astrolabe({
+      publicKey: "GBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
+      signTransaction: async () => ({ signedTxXdr: "AAAA" }),
+    });
+
+    vi.spyOn(client.schemaRegistry, "register_schema").mockRejectedValue(
+      new Error("HostError: Error(Contract, #1)"),
+    );
+
+    await expect(
+      client.registerSchema({
+        authority: "GABC",
+        name: "test",
+        definition: "string name",
+        revocable: false,
+      }),
+    ).rejects.toThrow(SchemaAlreadyExistsError);
+  });
 });
