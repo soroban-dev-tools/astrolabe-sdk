@@ -35,6 +35,22 @@ export {
 
 export { signerFromSecret, type SecretSigner } from "./signer.js";
 
+export {
+  AstrolabeError,
+  ContractError,
+  SchemaNotFoundError,
+  AttestationNotFoundError,
+  NotAuthorizedToRevokeError,
+  SchemaNotRevocableError,
+  AlreadyRevokedError,
+  DataTooLongError,
+  NotInitializedError,
+  SchemaAlreadyExistsError,
+  DefinitionTooLongError,
+  mapContractError,
+  type ContractName,
+} from "./errors.js";
+
 export type { Schema } from "./generated/schema-registry.js";
 export type { Attestation } from "./generated/attestation.js";
 
