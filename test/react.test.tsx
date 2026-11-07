@@ -7,6 +7,12 @@ import {
   useIsValid,
   useSchema,
   useSchemaAttestationCount,
+  astrolabeQueryKeys,
+  attestationQueryOptions,
+  schemaQueryOptions,
+  isValidQueryOptions,
+  attestationsForSubjectQueryOptions,
+  schemaAttestationCountQueryOptions,
 } from "../src/react.js";
 import type { Astrolabe } from "../src/client.js";
 
@@ -153,5 +159,146 @@ describe("react hooks", () => {
     );
     await waitFor(() => expect(errResult.current.loading).toBe(false));
     expect(errResult.current.error?.message).toBe("contract failure");
+  });
+});
+
+describe("TanStack React Query adapters", () => {
+  it("generates deterministic query keys for cache targeting", () => {
+    expect(astrolabeQueryKeys.all).toEqual(["astrolabe"]);
+    expect(astrolabeQueryKeys.attestation("abc")).toEqual([
+      "astrolabe",
+      "attestation",
+      "abc",
+    ]);
+    expect(astrolabeQueryKeys.attestation(undefined)).toEqual([
+      "astrolabe",
+      "attestation",
+      null,
+    ]);
+    expect(
+      astrolabeQueryKeys.attestation(new Uint8Array([0xde, 0xad])),
+    ).toEqual(["astrolabe", "attestation", "dead"]);
+
+    expect(astrolabeQueryKeys.schema("xyz")).toEqual([
+      "astrolabe",
+      "schema",
+      "xyz",
+    ]);
+    expect(astrolabeQueryKeys.isValid("xyz")).toEqual([
+      "astrolabe",
+      "isValid",
+      "xyz",
+    ]);
+    expect(astrolabeQueryKeys.attestationsForSubject("GABC")).toEqual([
+      "astrolabe",
+      "attestationsForSubject",
+      "GABC",
+    ]);
+    expect(astrolabeQueryKeys.schemaAttestationCount("xyz")).toEqual([
+      "astrolabe",
+      "schemaAttestationCount",
+      "xyz",
+    ]);
+  });
+
+  it("attestationQueryOptions returns proper queryKey, enabled, and queryFn", async () => {
+    const mockAttestation = { subject: "GABC" } as never;
+    const client = fakeClient({
+      getAttestation: vi.fn().mockResolvedValue(mockAttestation),
+    });
+
+    const opts = attestationQueryOptions(client, "11".repeat(32));
+    expect(opts.enabled).toBe(true);
+    expect(opts.queryKey).toEqual([
+      "astrolabe",
+      "attestation",
+      "11".repeat(32),
+    ]);
+
+    const result = await opts.queryFn();
+    expect(result).toEqual(mockAttestation);
+    expect(client.getAttestation).toHaveBeenCalledWith("11".repeat(32));
+
+    const disabledOpts = attestationQueryOptions(client, undefined);
+    expect(disabledOpts.enabled).toBe(false);
+    const nullRes = await disabledOpts.queryFn();
+    expect(nullRes).toBeNull();
+  });
+
+  it("schemaQueryOptions returns proper queryKey, enabled, and queryFn", async () => {
+    const mockSchema = { name: "KYC" } as never;
+    const client = fakeClient({
+      getSchema: vi.fn().mockResolvedValue(mockSchema),
+    });
+
+    const opts = schemaQueryOptions(client, "22".repeat(32));
+    expect(opts.enabled).toBe(true);
+    expect(opts.queryKey).toEqual(["astrolabe", "schema", "22".repeat(32)]);
+
+    const result = await opts.queryFn();
+    expect(result).toEqual(mockSchema);
+
+    const disabledOpts = schemaQueryOptions(client, undefined);
+    expect(disabledOpts.enabled).toBe(false);
+    expect(await disabledOpts.queryFn()).toBeNull();
+  });
+
+  it("isValidQueryOptions returns proper queryKey, enabled, and queryFn", async () => {
+    const client = fakeClient({
+      isValid: vi.fn().mockResolvedValue(true),
+    });
+
+    const opts = isValidQueryOptions(client, "33".repeat(32));
+    expect(opts.enabled).toBe(true);
+    expect(opts.queryKey).toEqual(["astrolabe", "isValid", "33".repeat(32)]);
+
+    const result = await opts.queryFn();
+    expect(result).toBe(true);
+
+    const disabledOpts = isValidQueryOptions(client, undefined);
+    expect(disabledOpts.enabled).toBe(false);
+    expect(await disabledOpts.queryFn()).toBe(false);
+  });
+
+  it("attestationsForSubjectQueryOptions returns proper queryKey, enabled, and queryFn", async () => {
+    const client = fakeClient({
+      attestationsForSubject: vi.fn().mockResolvedValue(["id1", "id2"]),
+    });
+
+    const opts = attestationsForSubjectQueryOptions(client, "GABC");
+    expect(opts.enabled).toBe(true);
+    expect(opts.queryKey).toEqual([
+      "astrolabe",
+      "attestationsForSubject",
+      "GABC",
+    ]);
+
+    const result = await opts.queryFn();
+    expect(result).toEqual(["id1", "id2"]);
+
+    const disabledOpts = attestationsForSubjectQueryOptions(client, undefined);
+    expect(disabledOpts.enabled).toBe(false);
+    expect(await disabledOpts.queryFn()).toEqual([]);
+  });
+
+  it("schemaAttestationCountQueryOptions returns proper queryKey, enabled, and queryFn", async () => {
+    const client = fakeClient({
+      schemaAttestationCount: vi.fn().mockResolvedValue(100n),
+    });
+
+    const opts = schemaAttestationCountQueryOptions(client, "44".repeat(32));
+    expect(opts.enabled).toBe(true);
+    expect(opts.queryKey).toEqual([
+      "astrolabe",
+      "schemaAttestationCount",
+      "44".repeat(32),
+    ]);
+
+    const result = await opts.queryFn();
+    expect(result).toBe(100n);
+
+    const disabledOpts = schemaAttestationCountQueryOptions(client, undefined);
+    expect(disabledOpts.enabled).toBe(false);
+    expect(await disabledOpts.queryFn()).toBeNull();
   });
 });
