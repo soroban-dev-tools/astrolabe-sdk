@@ -7,6 +7,7 @@
  */
 
 import { Buffer } from "buffer";
+import * as fs from "node:fs";
 import { Client as SchemaClient, type Schema } from "./generated/schema-registry.js";
 import {
   Client as AttestationClient,
@@ -25,24 +26,81 @@ export type SignTransaction = (
   opts?: { networkPassphrase?: string; address?: string },
 ) => Promise<{ signedTxXdr: string; signerAddress?: string }>;
 
+export type NetworkPreset = "testnet" | "local";
+
+export interface ReadRetryOptions {
+  /** Maximum number of retries for read calls. Default: 2 (total 3 attempts). Set to 0 to disable retries. */
+  maxRetries?: number;
+  /** Initial delay in ms before first retry. Default: 200ms. */
+  delayMs?: number;
+  /** Maximum backoff delay in ms. Default: 2000ms. */
+  maxDelayMs?: number;
+  /** Backoff multiplier. Default: 2. */
+  backoffFactor?: number;
+  /** Timeout per attempt in ms. Default: 10000ms. Set to 0 for no timeout. */
+  timeoutMs?: number;
+}
+
+export const DEFAULT_RETRY: Required<ReadRetryOptions> = {
+  maxRetries: 2,
+  delayMs: 200,
+  maxDelayMs: 2000,
+  backoffFactor: 2,
+  timeoutMs: 10000,
+};
+
 export interface AstrolabeOptions {
-  /** Named network. Only "testnet" ships with defaults today. */
-  network?: "testnet";
-  /** Soroban RPC endpoint. Defaults to the public Testnet RPC. */
+  /** Named network preset: "testnet" (default) or "local". */
+  network?: NetworkPreset;
+  /** Soroban RPC endpoint. Defaults to public Testnet or local standalone RPC. */
   rpcUrl?: string;
-  /** Network passphrase. Defaults to the value in the vendored deployments. */
+  /** Network passphrase. Defaults to the network preset or vendored deployments. */
   networkPassphrase?: string;
-  /** Override the contract ids. Defaults to the vendored deployment truth. */
+  /** Override the contract ids. Defaults to the vendored deployment truth or CONSTELLATION_DEPLOYMENTS. */
   contractIds?: { attestation?: string; schema_registry?: string };
   /** The public key that signs write transactions. */
   publicKey?: string;
   /** Signer for write transactions. Required for attest, revoke, registerSchema. */
   signTransaction?: SignTransaction;
-  /** Allow plain HTTP RPC (local development only). */
+  /** Allow plain HTTP RPC (defaults to true for local, false otherwise). */
   allowHttp?: boolean;
+  /** Retry options for read operations (reads only; writes never retry). */
+  retry?: ReadRetryOptions;
 }
 
-const DEFAULT_RPC_TESTNET = "https://soroban-testnet.stellar.org";
+export const DEFAULT_RPC_TESTNET = "https://soroban-testnet.stellar.org";
+export const DEFAULT_RPC_LOCAL = "http://localhost:8000/soroban/rpc";
+export const DEFAULT_PASSPHRASE_LOCAL = "Standalone Network ; February 2017";
+
+interface EnvDeployments {
+  networkPassphrase?: string;
+  contracts?: { attestation?: string; schema_registry?: string };
+}
+
+function loadDeploymentsEnv(): EnvDeployments | null {
+  if (typeof process === "undefined" || !process.env) return null;
+  const envVal = process.env.CONSTELLATION_DEPLOYMENTS;
+  if (!envVal || typeof envVal !== "string") return null;
+
+  const trimmed = envVal.trim();
+  if (trimmed.startsWith("{")) {
+    try {
+      return JSON.parse(trimmed) as EnvDeployments;
+    } catch {
+      return null;
+    }
+  }
+
+  try {
+    if (typeof fs.readFileSync === "function") {
+      const content = fs.readFileSync(trimmed, "utf-8");
+      return JSON.parse(content) as EnvDeployments;
+    }
+  } catch {
+    return null;
+  }
+  return null;
+}
 
 function toBuffer(uid: Uid): Buffer {
   if (typeof uid === "string") {
@@ -69,26 +127,86 @@ export interface AttestArgs {
   refUid?: Uid;
 }
 
+async function executeWithRetry<T>(
+  operation: () => Promise<T>,
+  options: Required<ReadRetryOptions>,
+): Promise<T> {
+  let delay = options.delayMs;
+
+  for (let attempt = 0; ; attempt++) {
+    try {
+      if (options.timeoutMs > 0) {
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        const timeoutPromise = new Promise<never>((_, reject) => {
+          timer = setTimeout(() => {
+            reject(
+              new Error(
+                `Read operation timed out after ${options.timeoutMs}ms`,
+              ),
+            );
+          }, options.timeoutMs);
+        });
+        try {
+          return await Promise.race([operation(), timeoutPromise]);
+        } finally {
+          if (timer !== undefined) clearTimeout(timer);
+        }
+      } else {
+        return await operation();
+      }
+    } catch (err) {
+      if (attempt >= options.maxRetries) {
+        throw err;
+      }
+      await new Promise((resolve) => setTimeout(resolve, delay));
+      delay = Math.min(delay * options.backoffFactor, options.maxDelayMs);
+    }
+  }
+}
+
 export class Astrolabe {
   readonly schemaRegistry: SchemaClient;
   readonly attestation: AttestationClient;
+  readonly retryOptions: Required<ReadRetryOptions>;
   private readonly hasSigner: boolean;
 
   constructor(options: AstrolabeOptions = {}) {
+    const isLocal = options.network === "local";
+    const envDeployments = loadDeploymentsEnv();
+
     const networkPassphrase =
-      options.networkPassphrase ?? deployments.networkPassphrase;
-    const rpcUrl = options.rpcUrl ?? DEFAULT_RPC_TESTNET;
+      options.networkPassphrase ??
+      envDeployments?.networkPassphrase ??
+      (isLocal ? DEFAULT_PASSPHRASE_LOCAL : deployments.networkPassphrase);
+
+    const rpcUrl =
+      options.rpcUrl ?? (isLocal ? DEFAULT_RPC_LOCAL : DEFAULT_RPC_TESTNET);
+
     const schemaId =
       options.contractIds?.schema_registry ??
+      envDeployments?.contracts?.schema_registry ??
       deployments.contracts.schema_registry;
+
     const attestationId =
-      options.contractIds?.attestation ?? deployments.contracts.attestation;
+      options.contractIds?.attestation ??
+      envDeployments?.contracts?.attestation ??
+      deployments.contracts.attestation;
+
+    const allowHttp = options.allowHttp ?? isLocal;
     this.hasSigner = Boolean(options.signTransaction);
+    this.retryOptions = {
+      maxRetries: options.retry?.maxRetries ?? DEFAULT_RETRY.maxRetries,
+      delayMs: options.retry?.delayMs ?? DEFAULT_RETRY.delayMs,
+      maxDelayMs: options.retry?.maxDelayMs ?? DEFAULT_RETRY.maxDelayMs,
+      backoffFactor:
+        options.retry?.backoffFactor ?? DEFAULT_RETRY.backoffFactor,
+      timeoutMs: options.retry?.timeoutMs ?? DEFAULT_RETRY.timeoutMs,
+    };
 
     const shared = {
       networkPassphrase,
       rpcUrl,
-      allowHttp: options.allowHttp ?? false,
+      allowHttp,
       publicKey: options.publicKey,
       signTransaction: options.signTransaction as never,
     };
@@ -98,6 +216,10 @@ export class Astrolabe {
       ...shared,
       contractId: attestationId,
     });
+  }
+
+  private async executeRead<T>(op: () => Promise<T>): Promise<T> {
+    return executeWithRetry(op, this.retryOptions);
   }
 
   private requireSigner(method: string): void {
@@ -128,14 +250,16 @@ export class Astrolabe {
 
   /** Read a schema by uid. Returns null when it does not exist. */
   async getSchema(schemaUid: Uid): Promise<Schema | null> {
-    try {
-      const tx = await this.schemaRegistry.get_schema({
-        schema_uid: toBuffer(schemaUid),
-      });
-      return tx.result ?? null;
-    } catch (err) {
-      throw mapContractError("schema_registry", err);
-    }
+    return this.executeRead(async () => {
+      try {
+        const tx = await this.schemaRegistry.get_schema({
+          schema_uid: toBuffer(schemaUid),
+        });
+        return tx.result ?? null;
+      } catch (err) {
+        throw mapContractError("schema_registry", err);
+      }
+    });
   }
 
   /** Create an attestation. Returns the attestation uid as a hex string. */
@@ -175,35 +299,41 @@ export class Astrolabe {
 
   /** Read an attestation by uid. Returns null when it does not exist. */
   async getAttestation(attestationUid: Uid): Promise<Attestation | null> {
-    try {
-      const tx = await this.attestation.get_attestation({
-        attestation_uid: toBuffer(attestationUid),
-      });
-      return tx.result ?? null;
-    } catch (err) {
-      throw mapContractError("attestation", err);
-    }
+    return this.executeRead(async () => {
+      try {
+        const tx = await this.attestation.get_attestation({
+          attestation_uid: toBuffer(attestationUid),
+        });
+        return tx.result ?? null;
+      } catch (err) {
+        throw mapContractError("attestation", err);
+      }
+    });
   }
 
   /** Whether an attestation exists, is not revoked, and is not expired. */
   async isValid(attestationUid: Uid): Promise<boolean> {
-    try {
-      const tx = await this.attestation.is_valid({
-        attestation_uid: toBuffer(attestationUid),
-      });
-      return tx.result;
-    } catch (err) {
-      throw mapContractError("attestation", err);
-    }
+    return this.executeRead(async () => {
+      try {
+        const tx = await this.attestation.is_valid({
+          attestation_uid: toBuffer(attestationUid),
+        });
+        return tx.result;
+      } catch (err) {
+        throw mapContractError("attestation", err);
+      }
+    });
   }
 
   /** The capped, most-recent attestation uids for a subject, as hex strings. */
   async attestationsForSubject(subject: string): Promise<string[]> {
-    try {
-      const tx = await this.attestation.attestations_for_subject({ subject });
-      return tx.result.map((b) => bytesToHex(new Uint8Array(b)));
-    } catch (err) {
-      throw mapContractError("attestation", err);
-    }
+    return this.executeRead(async () => {
+      try {
+        const tx = await this.attestation.attestations_for_subject({ subject });
+        return tx.result.map((b) => bytesToHex(new Uint8Array(b)));
+      } catch (err) {
+        throw mapContractError("attestation", err);
+      }
+    });
   }
 }

@@ -8,9 +8,17 @@
  * The React hooks ship from the `@astrolabe/sdk/react` entry point.
  */
 
-export { Astrolabe } from "./client.js";
+export {
+  Astrolabe,
+  DEFAULT_RPC_TESTNET,
+  DEFAULT_RPC_LOCAL,
+  DEFAULT_PASSPHRASE_LOCAL,
+  DEFAULT_RETRY,
+} from "./client.js";
 export type {
   AstrolabeOptions,
+  NetworkPreset,
+  ReadRetryOptions,
   RegisterSchemaArgs,
   AttestArgs,
   SignTransaction,
@@ -20,10 +28,14 @@ export type {
 export {
   encodeData,
   decodeData,
+  decodeTyped,
+  createSchemaDecoder,
   hexToBytes,
   bytesToHex,
   EncodingError,
   type FieldValue,
+  type InferSchemaType,
+  type FieldTypeToTsType,
 } from "./encoding.js";
 
 export {
