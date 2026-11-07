@@ -2,6 +2,8 @@ import { describe, it, expect } from "vitest";
 import {
   encodeData,
   decodeData,
+  decodeTyped,
+  createSchemaDecoder,
   hexToBytes,
   bytesToHex,
   EncodingError,
@@ -161,5 +163,64 @@ describe("hex helpers", () => {
   it("rejects malformed hex", () => {
     expect(() => hexToBytes("xyz")).toThrow(/invalid hex/);
     expect(() => hexToBytes("abc")).toThrow(/invalid hex/);
+  });
+});
+
+describe("typed decode helpers", () => {
+  it("decodes verified_merchant with inferred type", () => {
+    const def = "string name,string country";
+    const raw = { name: "Acme Corp", country: "NG" };
+    const bytes = encodeData(def, raw);
+
+    const typed = decodeTyped(def, bytes);
+    expect(typed.name).toBe("Acme Corp");
+    expect(typed.country).toBe("NG");
+  });
+
+  it("decodes kyc_tier with explicit generic type and bigint", () => {
+    interface KycTierRecord {
+      subject: string;
+      tier: number;
+      issued_at: bigint;
+    }
+
+    const def = "address subject,u32 tier,u64 issued_at";
+    const raw: KycTierRecord = {
+      subject: "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF",
+      tier: 2,
+      issued_at: 1700000000n,
+    };
+    const bytes = encodeData(def, raw);
+
+    const decoded = decodeData<KycTierRecord>(def, bytes);
+    expect(decoded.subject).toBe(raw.subject);
+    expect(decoded.tier).toBe(2);
+    expect(decoded.issued_at).toBe(1700000000n);
+  });
+
+  it("decodes contributor_badge with reusable pre-parsed decoder", () => {
+    interface ContributorBadge {
+      project: string;
+      points: number;
+      active: boolean;
+      metadata: Uint8Array;
+    }
+
+    const def = "string project,u32 points,bool active,bytes metadata";
+    const decoder = createSchemaDecoder<ContributorBadge>(def);
+
+    const raw: ContributorBadge = {
+      project: "astrolabe",
+      points: 500,
+      active: true,
+      metadata: new Uint8Array([1, 2, 3, 4]),
+    };
+    const bytes = encodeData(def, raw);
+
+    const decoded = decoder(bytes);
+    expect(decoded.project).toBe("astrolabe");
+    expect(decoded.points).toBe(500);
+    expect(decoded.active).toBe(true);
+    expect(decoded.metadata).toEqual(new Uint8Array([1, 2, 3, 4]));
   });
 });
