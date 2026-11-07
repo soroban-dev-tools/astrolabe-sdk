@@ -278,4 +278,43 @@ describe("Read retry and write safety policy", () => {
     ).rejects.toThrow("Register schema failed");
     expect(registerAttempts).toBe(1);
   });
+
+  it("queries schemaAttestationCount with retry and error mapping", async () => {
+    const client = new Astrolabe({
+      retry: { maxRetries: 1, initialDelayMs: 5, backoffFactor: 1 },
+    });
+    const schemaUid = "aa".repeat(32);
+
+    let attempts = 0;
+    vi.spyOn(client.attestation, "schema_attestation_count").mockImplementation(
+      async ({ schema_uid }) => {
+        expect(schema_uid).toEqual(Buffer.from("aa".repeat(32), "hex"));
+        attempts++;
+        if (attempts === 1) {
+          throw new Error("RPC temporary failure");
+        }
+        return {
+          result: 42n,
+        } as never;
+      },
+    );
+
+    const count = await client.schemaAttestationCount(schemaUid);
+    expect(count).toBe(42n);
+    expect(attempts).toBe(2);
+  });
+
+  it("queries registry contract address bound to attestation contract", async () => {
+    const client = new Astrolabe();
+    const mockRegistryAddress = "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
+
+    vi.spyOn(client.attestation, "registry").mockResolvedValue({
+      result: {
+        unwrap: () => mockRegistryAddress,
+      },
+    } as never);
+
+    const addr = await client.registry();
+    expect(addr).toBe(mockRegistryAddress);
+  });
 });
