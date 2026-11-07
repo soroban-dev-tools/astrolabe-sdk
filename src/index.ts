@@ -63,6 +63,13 @@ export {
   type ContractName,
 } from "./errors.js";
 
+export {
+  serializeAttestationPayload,
+  hashAttestationPayload,
+  hashAttestationPayloadHex,
+  type AttestationPayload,
+} from "./crypto.js";
+
 export type { Schema } from "./generated/schema-registry.js";
 export type { Attestation } from "./generated/attestation.js";
 

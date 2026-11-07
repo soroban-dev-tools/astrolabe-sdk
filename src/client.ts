@@ -336,4 +336,30 @@ export class Astrolabe {
       }
     });
   }
+
+  /** The total number of attestations created against a schema. */
+  async schemaAttestationCount(schemaUid: Uid): Promise<bigint> {
+    return this.executeRead(async () => {
+      try {
+        const tx = await this.attestation.schema_attestation_count({
+          schema_uid: toBuffer(schemaUid),
+        });
+        return tx.result;
+      } catch (err) {
+        throw mapContractError("attestation", err);
+      }
+    });
+  }
+
+  /** Read the schema registry contract address bound to the attestation contract. */
+  async registry(): Promise<string> {
+    return this.executeRead(async () => {
+      try {
+        const tx = await this.attestation.registry();
+        return tx.result.unwrap();
+      } catch (err) {
+        throw mapContractError("attestation", err);
+      }
+    });
+  }
 }
