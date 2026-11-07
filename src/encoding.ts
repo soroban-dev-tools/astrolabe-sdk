@@ -25,6 +25,54 @@ import { parseDefinition, type FieldType, type SchemaField } from "./schema.js";
 /** A decoded attestation value. */
 export type FieldValue = string | number | bigint | boolean | Uint8Array;
 
+/** Maps a schema FieldType string to its corresponding TypeScript primitive type. */
+export type FieldTypeToTsType<T extends FieldType> = T extends "bool"
+  ? boolean
+  : T extends "u32" | "i32"
+    ? number
+    : T extends "u64" | "i64"
+      ? bigint
+      : T extends "string" | "address"
+        ? string
+        : T extends "bytes"
+          ? Uint8Array
+          : FieldValue;
+
+type Trim<S extends string> = S extends ` ${infer Rest}`
+  ? Trim<Rest>
+  : S extends `${infer Rest} `
+    ? Trim<Rest>
+    : S;
+
+type ParseFieldEntry<Entry extends string> =
+  Trim<Entry> extends `${infer T} ${infer Name}`
+    ? T extends FieldType
+      ? { [K in Name]: FieldTypeToTsType<T> }
+      : never
+    : never;
+
+type UnionToIntersection<U> = (
+  U extends unknown ? (k: U) => void : never
+) extends (k: infer I) => void
+  ? I
+  : never;
+
+type SplitFields<S extends string> = S extends `${infer Head},${infer Tail}`
+  ? ParseFieldEntry<Head> | SplitFields<Tail>
+  : ParseFieldEntry<S>;
+
+/**
+ * Infer a TypeScript record shape from a compile-time schema definition string.
+ *
+ * Example:
+ *   type Merchant = InferSchemaType<"string name,u32 score,bool active">;
+ *   // => { name: string; score: number; active: boolean }
+ */
+export type InferSchemaType<Def extends string> =
+  UnionToIntersection<SplitFields<Def>> extends infer O
+    ? { [K in keyof O]: O[K] }
+    : never;
+
 /** Thrown when a value does not match its declared field type. */
 export class EncodingError extends Error {
   constructor(message: string) {
@@ -282,10 +330,10 @@ export function encodeData(
  * @throws {EncodingError} if the buffer is truncated or has trailing bytes.
  * @throws {SchemaDefinitionError} if the definition is malformed.
  */
-export function decodeData(
+export function decodeData<T = Record<string, FieldValue>>(
   definition: string,
   data: Uint8Array,
-): Record<string, FieldValue> {
+): T {
   const fields = parseDefinition(definition);
   const r = new Reader(data);
   const out: Record<string, FieldValue> = {};
@@ -295,7 +343,44 @@ export function decodeData(
   if (!r.atEnd()) {
     throw new EncodingError("trailing bytes after decoding all fields");
   }
-  return out;
+  return out as T;
+}
+
+/**
+ * Decode an attestation data buffer with inferred types from a literal schema definition.
+ *
+ * @example
+ *   const res = decodeTyped("string name,u32 tier", bytes);
+ *   // res is typed as { name: string; tier: number }
+ */
+export function decodeTyped<Def extends string>(
+  definition: Def,
+  data: Uint8Array,
+): InferSchemaType<Def> extends never
+  ? Record<string, FieldValue>
+  : InferSchemaType<Def> {
+  return decodeData(definition, data) as never;
+}
+
+/**
+ * Create a reusable, pre-parsed decoder function for a specific schema definition.
+ * Avoids re-parsing the schema definition string on every decode call.
+ */
+export function createSchemaDecoder<T = Record<string, FieldValue>>(
+  definition: string,
+): (data: Uint8Array) => T {
+  const fields = parseDefinition(definition);
+  return (data: Uint8Array): T => {
+    const r = new Reader(data);
+    const out: Record<string, FieldValue> = {};
+    for (const field of fields) {
+      out[field.name] = decodeField(r, field);
+    }
+    if (!r.atEnd()) {
+      throw new EncodingError("trailing bytes after decoding all fields");
+    }
+    return out as T;
+  };
 }
 
 /** Convert a hex string (with or without a 0x prefix) to bytes. */

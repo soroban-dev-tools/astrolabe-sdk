@@ -26,10 +26,14 @@ export type {
 export {
   encodeData,
   decodeData,
+  decodeTyped,
+  createSchemaDecoder,
   hexToBytes,
   bytesToHex,
   EncodingError,
   type FieldValue,
+  type InferSchemaType,
+  type FieldTypeToTsType,
 } from "./encoding.js";
 
 export {
