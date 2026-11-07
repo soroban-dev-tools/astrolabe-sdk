@@ -281,7 +281,7 @@ describe("Read retry and write safety policy", () => {
 
   it("queries schemaAttestationCount with retry and error mapping", async () => {
     const client = new Astrolabe({
-      retry: { maxRetries: 1, initialDelayMs: 5, backoffFactor: 1 },
+      retry: { maxRetries: 1, delayMs: 5, backoffFactor: 1 },
     });
     const schemaUid = "aa".repeat(32);
 
