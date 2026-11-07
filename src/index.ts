@@ -13,10 +13,12 @@ export {
   DEFAULT_RPC_TESTNET,
   DEFAULT_RPC_LOCAL,
   DEFAULT_PASSPHRASE_LOCAL,
+  DEFAULT_RETRY,
 } from "./client.js";
 export type {
   AstrolabeOptions,
   NetworkPreset,
+  ReadRetryOptions,
   RegisterSchemaArgs,
   AttestArgs,
   SignTransaction,

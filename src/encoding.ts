@@ -308,17 +308,18 @@ function decodeField(r: Reader, field: SchemaField): FieldValue {
  * @throws {EncodingError} on a missing field or a type mismatch.
  * @throws {SchemaDefinitionError} if the definition is malformed.
  */
-export function encodeData(
+export function encodeData<T extends object = Record<string, FieldValue>>(
   definition: string,
-  values: Record<string, FieldValue>,
+  values: T,
 ): Uint8Array {
   const fields = parseDefinition(definition);
   const w = new Writer();
+  const valRecord = values as Record<string, FieldValue>;
   for (const field of fields) {
     if (!(field.name in values)) {
       throw new EncodingError(`missing value for field "${field.name}"`);
     }
-    encodeField(w, field, values[field.name]);
+    encodeField(w, field, valRecord[field.name]);
   }
   return w.finish();
 }
