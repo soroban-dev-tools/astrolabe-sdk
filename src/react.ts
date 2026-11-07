@@ -10,6 +10,7 @@
 import { useCallback, useEffect, useState } from "react";
 import type { Astrolabe, Uid } from "./client.js";
 import type { Attestation } from "./generated/attestation.js";
+import type { Schema } from "./generated/schema-registry.js";
 
 export interface QueryState<T> {
   data: T | undefined;
@@ -84,6 +85,30 @@ export function useIsValid(
   const key = typeof uid === "string" ? uid : uid ? String(uid) : "";
   return useAsync<boolean>(
     () => (uid ? client.isValid(uid) : Promise.resolve(false)),
+    [client, key],
+  );
+}
+
+/** Fetch a single schema by uid. */
+export function useSchema(
+  client: Astrolabe,
+  uid: Uid | undefined,
+): QueryState<Schema | null> {
+  const key = typeof uid === "string" ? uid : uid ? String(uid) : "";
+  return useAsync<Schema | null>(
+    () => (uid ? client.getSchema(uid) : Promise.resolve(null)),
+    [client, key],
+  );
+}
+
+/** Fetch the total attestation count for a schema. */
+export function useSchemaAttestationCount(
+  client: Astrolabe,
+  uid: Uid | undefined,
+): QueryState<bigint | null> {
+  const key = typeof uid === "string" ? uid : uid ? String(uid) : "";
+  return useAsync<bigint | null>(
+    () => (uid ? client.schemaAttestationCount(uid) : Promise.resolve(null)),
     [client, key],
   );
 }
