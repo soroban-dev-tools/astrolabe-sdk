@@ -1,99 +1,89 @@
-# Open Issues — astrolabe-sdk
+# Roadmap & Issues — astrolabe-sdk
 
-Unclaimed work in the SDK, ordered easiest to hardest. Difficulty labels:
-`good first issue`, `intermediate`, `advanced`. This list is the source of truth
-for the "Where to start" section of `CONTRIBUTING.md`.
-
-The single largest unclaimed piece is **S6, the delegated-attestation and
-off-chain client**, which cannot land until the matching contract work ships.
+This document tracks the feature backlog and roadmap for `@astrolabe/sdk`.
 
 ---
 
-## S1. Add a `network: "local"` preset
+## Completed in v0.1.0
 
-**Difficulty:** good first issue
-**Likely files:** `src/client.ts`, `README.md`, `test/`
+- [x] **S1. Add `network: "local"` preset**
+  - Resolved standalone local RPC (`http://localhost:8000/soroban/rpc`), local passphrase, automatic `allowHttp: true`, and `CONSTELLATION_DEPLOYMENTS` environment variables.
+  - Implemented in `src/client.ts`; tested in `test/client.test.ts`.
 
-The client only knows `testnet` defaults. Add a `local` preset that reads
-`CONSTELLATION_DEPLOYMENTS` or an explicit `rpcUrl`, so a contract developer can
-point the SDK at a local deployment. See `docs/multi-repo.md` section 5.
+- [x] **S2. Typed decode helpers per schema**
+  - Added `decodeTyped`, `createSchemaDecoder`, and `InferSchemaType<Def>` for compile-time schema type inference.
+  - Implemented in `src/encoding.ts`; tested in `test/encoding.test.ts`.
 
-**Acceptance criteria**
-- `new Astrolabe({ network: "local", rpcUrl, contractIds })` works.
-- A unit test covers option resolution and precedence.
+- [x] **S3. Friendly contract error mapping**
+  - Strongly-typed domain error hierarchy (`SchemaNotFoundError`, `AttestationNotFoundError`, `NotAuthorizedToRevokeError`, etc.) and `mapContractError` translation layer.
+  - Implemented in `src/errors.ts`; tested in `test/errors.test.ts`.
 
-## S2. Typed decode helpers per schema
+- [x] **S4. Retry and timeout policy for reads**
+  - Configurable exponential backoff and timeout runner for read queries (`getSchema`, `getAttestation`, `isValid`, `attestationsForSubject`, `schemaAttestationCount`).
+  - Strict write safety guarantee ensuring `attest`, `revoke`, and `registerSchema` are never retried.
+  - Implemented in `src/client.ts`; tested in `test/client.test.ts`.
 
-**Difficulty:** good first issue
-**Likely files:** `src/encoding.ts`, `test/encoding.test.ts`
+- [x] **S5. Browser bundle and wallet-signer example**
+  - Documented browser wallet signing workflows with Freighter API and Stellar Wallets Kit.
+  - Implemented in `docs/wallet-signing.md` and `README.md`.
 
-`decodeData` returns `Record<string, FieldValue>`. Add a generic helper that
-returns a typed object given a definition, improving editor completion.
+- [x] **S6 (Foundation). Canonical attestation payload serializer and hasher**
+  - Implemented length-prefixed canonical binary serializer with domain separation (`"astrolabe-attestation-v1"`) and SHA-256 hash calculation (`hashAttestationPayload`, `hashAttestationPayloadHex`).
+  - Implemented in `src/crypto.ts`; tested in `test/crypto.test.ts`.
 
-**Acceptance criteria**
-- Typed return inferred from a definition literal where feasible.
-- Tests for at least three definitions.
+- [x] **S7. TanStack React Query adapters**
+  - Tree-shakeable query option factories (`attestationQueryOptions`, `schemaQueryOptions`, etc.) and deterministic query key factory (`astrolabeQueryKeys`) without hard runtime dependencies.
+  - Implemented in `src/react.ts`; tested in `test/react.test.tsx`.
 
-## S3. Friendly error mapping
+---
 
-**Difficulty:** intermediate
-**Likely files:** `src/client.ts`, `src/errors.ts` (new), `test/`
+## Active & Upcoming Roadmap (The Remaining ~10%)
 
-Contract calls fail with a numeric error code. Map codes to named SDK errors
-(`SchemaNotRevocable`, `NotAuthorizedToRevoke`, and so on) so callers can branch
-on `err.code`. The codes are in the contracts repo `docs/protocol.md` section 6.
+### S6 (Part 2). On-Chain Delegated Attestation Submission (`attestDelegated`)
 
-**Acceptance criteria**
-- Each contract error surfaces as a typed error carrying its numeric code.
-- Tests assert the mapping from a simulated failure.
+**Status:** Blocked on upstream contracts (`astrolabe-contracts` C7/C8)
+**Difficulty:** Advanced
+**Likely files:** `src/client.ts`, `src/generated/attestation.ts`, `test/client.test.ts`
 
-## S4. Retry and timeout policy for reads
+**Description:**
+Once the Soroban contracts expose the `attest_delegated` and `verify_offchain` entrypoints on Testnet:
+1. Re-generate TypeScript bindings with `stellar contract bindings typescript`.
+2. Add `client.attestDelegated({ payload, signature, feePayer })` enabling issuers to sign off-chain claims that third parties or relayers can submit on-chain.
+3. Add `client.verifyOffchain({ payload, signature, issuerPublicKey })` for off-chain Ed25519 signature verification against the canonical hash.
 
-**Difficulty:** intermediate
-**Likely files:** `src/client.ts`, `test/`
+**Acceptance criteria:**
+- `client.attestDelegated` passes the canonical payload hash and signature to the contract.
+- End-to-end integration test validating a delegated attestation flow.
 
-Testnet RPC is flaky. Add a small, configurable retry with backoff for read
-methods only. Writes must never auto-retry, to avoid double submission.
+---
 
-**Acceptance criteria**
-- Configurable retry count and backoff; default is conservative.
-- A test proves writes are not retried.
+### S8. Multi-Attestation Transaction Bundling (Batch Operations)
 
-## S5. Browser bundle and wallet-signer example
+**Status:** Open / Backlog
+**Difficulty:** Intermediate
+**Likely files:** `src/client.ts`, `test/batch.test.ts`
 
-**Difficulty:** intermediate
-**Likely files:** `README.md`, `examples/` (new)
+**Description:**
+In high-throughput issuer workflows, sending individual transactions per attestation incurs unnecessary network round-trips and ledger sequence increments.
+Provide a batch builder utility that packs multiple attestation calls into a single Soroban atomic transaction or pipelined simulation.
 
-Document and test the browser path: passing a Stellar Wallets Kit signer into the
-client. Add a minimal example that the explorer can mirror.
+**Acceptance criteria:**
+- `client.batchAttest(args: AttestArgs[]): Promise<string[]>`
+- Transaction respects Soroban instruction limits and transaction footprint sizes.
+- Comprehensive unit tests covering partial failures and batch signing.
 
-**Acceptance criteria**
-- An example that compiles and type-checks against the public API.
-- README section on wallet signing that does not touch secret keys.
+---
 
-## S6. Delegated-attestation and off-chain client
+### S9. Subsquid / Indexer Integration Adapters
 
-**Difficulty:** advanced
-**Likely files:** `src/client.ts`, `src/encoding.ts`, `src/generated/*`
+**Status:** Open / Backlog
+**Difficulty:** Intermediate
+**Likely files:** `src/indexer.ts`, `docs/indexer.md`
 
-Once the contracts ship `attest_delegated` and `verify_offchain` (contracts issues
-C7 and C8), add client methods and the canonical payload builder and signer. This
-is the largest open piece and depends on the contract work landing first.
+**Description:**
+While direct RPC queries to Soroban nodes provide the authoritative source of truth for current state and TTLs, querying historical attestations or complex filters across multiple subjects requires an indexer (such as Subsquid or a Mercury indexer).
+Add optional GraphQL client helpers configured with standard Astrolabe indexer queries.
 
-**Acceptance criteria**
-- Payload builder matches the contract's canonical format exactly.
-- Methods for delegated attest and off-chain verify with tests.
-- Compatibility table in the README updated for the new protocol version.
-
-## S7. React Query adapters
-
-**Difficulty:** intermediate
-**Likely files:** `src/react.ts`, `test/react.test.tsx`
-
-The hooks are hand-rolled. Provide optional adapters for TanStack Query so apps
-already using it get caching and invalidation for free, without making it a hard
-dependency.
-
-**Acceptance criteria**
-- Adapters are opt-in and tree-shakeable.
-- Hand-rolled hooks remain the default with no new required dependency.
+**Acceptance criteria:**
+- Typed queries for fetching attestations by issuer, date range, or schema UID.
+- Seamless fallback to direct RPC `attestationsForSubject` when an indexer endpoint is not configured.
