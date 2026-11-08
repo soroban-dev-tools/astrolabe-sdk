@@ -11,6 +11,9 @@ on:
 jobs:
   build-and-test:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node-version: [20, 22]
     steps:
       - uses: actions/checkout@v4
 
@@ -20,7 +23,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: ${{ matrix.node-version }}
           cache: pnpm
 
       # esbuild runs without its optional build script; --ignore-scripts keeps
@@ -39,6 +42,13 @@ jobs:
 
       - name: Build
         run: pnpm build
+
+      - name: Verify Build Artifacts
+        run: |
+          test -f dist/index.js
+          test -f dist/index.d.ts
+          test -f dist/react.js
+          test -f dist/react.d.ts
 
   # Testnet integration tests run on a schedule, never as a pull-request gate,
   # because Testnet resets and rate limits make them flaky. They need a funded
