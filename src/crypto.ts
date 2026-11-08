@@ -9,7 +9,8 @@
  */
 
 import { hash } from "@stellar/stellar-sdk";
-import type { Uid } from "./client.js";
+import type { Uid } from "./uid.js";
+import { parseUid } from "./uid.js";
 import { bytesToHex } from "./encoding.js";
 
 const DOMAIN_SEPARATOR = Buffer.from("astrolabe-attestation-v1", "utf-8");
@@ -21,23 +22,6 @@ export interface AttestationPayload {
   data: Uint8Array;
   expiration?: number | bigint;
   refUid?: Uid;
-}
-
-function parseUidBuffer(uid: Uid, fieldName: string): Buffer {
-  let buf: Buffer;
-  if (typeof uid === "string") {
-    const clean = uid.startsWith("0x") ? uid.slice(2) : uid;
-    if (!/^[0-9a-fA-F]*$/.test(clean) || clean.length !== 64) {
-      throw new Error(`${fieldName} must be a 32-byte hex string (64 characters)`);
-    }
-    buf = Buffer.from(clean, "hex");
-  } else {
-    buf = Buffer.from(uid);
-    if (buf.length !== 32) {
-      throw new Error(`${fieldName} must be 32 bytes`);
-    }
-  }
-  return buf;
 }
 
 /**
@@ -55,7 +39,7 @@ function parseUidBuffer(uid: Uid, fieldName: string): Buffer {
 export function serializeAttestationPayload(
   payload: AttestationPayload,
 ): Uint8Array {
-  const schemaBuf = parseUidBuffer(payload.schemaUid, "schemaUid");
+  const schemaBuf = parseUid(payload.schemaUid, "schemaUid");
 
   const issuerBuf = Buffer.from(payload.issuer, "utf-8");
   const issuerLen = Buffer.alloc(4);
@@ -75,7 +59,7 @@ export function serializeAttestationPayload(
 
   const refBuf =
     payload.refUid !== undefined
-      ? parseUidBuffer(payload.refUid, "refUid")
+      ? parseUid(payload.refUid, "refUid")
       : Buffer.alloc(32, 0);
 
   const dataBuf = Buffer.from(payload.data);
