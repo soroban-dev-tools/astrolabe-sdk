@@ -1,0 +1,13 @@
+{
+  "$schema": "https://raw.githubusercontent.com/drips-network/funding-json/main/schema.json",
+  "version": "1.0.0",
+  "name": "@astrolabe/sdk",
+  "description": "TypeScript SDK for the Astrolabe attestation registry on Stellar Soroban",
+  "drips": {
+    "network": "stellar",
+    "address": "FILL_IN_ADDRESS"
+  },
+  "repositories": [
+    "https://github.com/soroban-dev-tools/astrolabe-sdk"
+  ]
+}
