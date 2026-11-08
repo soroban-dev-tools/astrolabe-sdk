@@ -16,9 +16,9 @@ import {
 import deployments from "./deployments.json";
 import { bytesToHex } from "./encoding.js";
 import { mapContractError } from "./errors.js";
+import { parseUid, type Uid, InvalidUidError } from "./uid.js";
 
-/** A uid may be passed as a hex string or raw bytes. */
-export type Uid = string | Uint8Array;
+export { parseUid, type Uid, InvalidUidError };
 
 /** A function that signs a transaction XDR, as produced by a wallet or keypair. */
 export type SignTransaction = (
@@ -100,14 +100,6 @@ function loadDeploymentsEnv(): EnvDeployments | null {
     return null;
   }
   return null;
-}
-
-function toBuffer(uid: Uid): Buffer {
-  if (typeof uid === "string") {
-    const clean = uid.startsWith("0x") ? uid.slice(2) : uid;
-    return Buffer.from(clean, "hex");
-  }
-  return Buffer.from(uid);
 }
 
 export interface RegisterSchemaArgs {
@@ -250,10 +242,11 @@ export class Astrolabe {
 
   /** Read a schema by uid. Returns null when it does not exist. */
   async getSchema(schemaUid: Uid): Promise<Schema | null> {
+    const uidBuf = parseUid(schemaUid, "schemaUid");
     return this.executeRead(async () => {
       try {
         const tx = await this.schemaRegistry.get_schema({
-          schema_uid: toBuffer(schemaUid),
+          schema_uid: uidBuf,
         });
         return tx.result ?? null;
       } catch (err) {
@@ -265,15 +258,18 @@ export class Astrolabe {
   /** Create an attestation. Returns the attestation uid as a hex string. */
   async attest(args: AttestArgs): Promise<string> {
     this.requireSigner("attest");
+    const schemaUidBuf = parseUid(args.schemaUid, "schemaUid");
+    const refUidBuf =
+      args.refUid === undefined ? undefined : parseUid(args.refUid, "refUid");
     try {
       const tx = await this.attestation.attest({
         issuer: args.issuer,
-        schema_uid: toBuffer(args.schemaUid),
+        schema_uid: schemaUidBuf,
         subject: args.subject,
         data: Buffer.from(args.data),
         expiration:
           args.expiration === undefined ? undefined : BigInt(args.expiration),
-        ref_uid: args.refUid === undefined ? undefined : toBuffer(args.refUid),
+        ref_uid: refUidBuf,
       });
       const sent = await tx.signAndSend();
       return bytesToHex(new Uint8Array(sent.result.unwrap()));
@@ -285,10 +281,11 @@ export class Astrolabe {
   /** Revoke an attestation by uid. */
   async revoke(issuer: string, attestationUid: Uid): Promise<void> {
     this.requireSigner("revoke");
+    const uidBuf = parseUid(attestationUid, "attestationUid");
     try {
       const tx = await this.attestation.revoke({
         issuer,
-        attestation_uid: toBuffer(attestationUid),
+        attestation_uid: uidBuf,
       });
       const sent = await tx.signAndSend();
       sent.result.unwrap();
@@ -299,10 +296,11 @@ export class Astrolabe {
 
   /** Read an attestation by uid. Returns null when it does not exist. */
   async getAttestation(attestationUid: Uid): Promise<Attestation | null> {
+    const uidBuf = parseUid(attestationUid, "attestationUid");
     return this.executeRead(async () => {
       try {
         const tx = await this.attestation.get_attestation({
-          attestation_uid: toBuffer(attestationUid),
+          attestation_uid: uidBuf,
         });
         return tx.result ?? null;
       } catch (err) {
@@ -313,10 +311,11 @@ export class Astrolabe {
 
   /** Whether an attestation exists, is not revoked, and is not expired. */
   async isValid(attestationUid: Uid): Promise<boolean> {
+    const uidBuf = parseUid(attestationUid, "attestationUid");
     return this.executeRead(async () => {
       try {
         const tx = await this.attestation.is_valid({
-          attestation_uid: toBuffer(attestationUid),
+          attestation_uid: uidBuf,
         });
         return tx.result;
       } catch (err) {
@@ -339,10 +338,11 @@ export class Astrolabe {
 
   /** The total number of attestations created against a schema. */
   async schemaAttestationCount(schemaUid: Uid): Promise<bigint> {
+    const uidBuf = parseUid(schemaUid, "schemaUid");
     return this.executeRead(async () => {
       try {
         const tx = await this.attestation.schema_attestation_count({
-          schema_uid: toBuffer(schemaUid),
+          schema_uid: uidBuf,
         });
         return tx.result;
       } catch (err) {

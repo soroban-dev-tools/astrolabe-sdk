@@ -14,6 +14,8 @@ export {
   DEFAULT_RPC_LOCAL,
   DEFAULT_PASSPHRASE_LOCAL,
   DEFAULT_RETRY,
+  parseUid,
+  InvalidUidError,
 } from "./client.js";
 export type {
   AstrolabeOptions,
